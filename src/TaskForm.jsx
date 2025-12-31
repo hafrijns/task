@@ -1,93 +1,183 @@
+import React, { useState } from "react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import ModalitiesEditor from "./ModalitiesEditor";
+
 export default function TaskForm({ taskData, setTaskData }) {
+  // Ensure all rows have modality as an array
+  const [rows, setRows] = useState(
+    taskData.rows?.map((r) => ({
+      ...r,
+      modality: Array.isArray(r.modality) ? r.modality : [],
+    })) || [
+      { human: "", robot: "", communicated: "", modality: [] },
+      { human: "", robot: "", communicated: "", modality: [] },
+      { human: "", robot: "", communicated: "", modality: [] },
+    ]
+  );
+
+  const [editingModalities, setEditingModalities] = useState(null);
+
+  const communicatedOptions = [
+    "Motion intent",
+    "Actions",
+    "Coordination/process",
+    "Goal object/person",
+    "Safety related",
+    "Failure recovery",
+    "Privacy",
+    "Other",
+  ];
+  const modalityOptions = ["Light", "Display", "Sound", "Speech", "Gesture", "Other"];
+
+  const updateRows = (newRows) => {
+    setRows(newRows);
+    setTaskData({ ...taskData, rows: newRows });
+  };
+
+  const handleChange = (index, key, value) => {
+    const newRows = [...rows];
+    newRows[index][key] = value;
+    updateRows(newRows);
+  };
+
+  const addRow = () => {
+    const newRows = [...rows, { human: "", robot: "", communicated: "", modality: [] }];
+    updateRows(newRows);
+  };
+
+  const deleteRow = (index) => {
+    const newRows = rows.filter((_, i) => i !== index);
+    updateRows(newRows);
+  };
+
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const newRows = Array.from(rows);
+    const [moved] = newRows.splice(result.source.index, 1);
+    newRows.splice(result.destination.index, 0, moved);
+    updateRows(newRows);
+  };
+
   return (
-    <div style={{ maxWidth: "600px" }}>
-      <h3>Task Definition</h3>
+    <div style={{ overflowX: "auto", padding: "10px" }}>
+      <p>Write out the steps in the process: what do human and robot do and communicate?</p>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="taskRows">
+          {(provided) => (
+            <table
+              style={{ borderCollapse: "collapse", width: "100%" }}
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+            >
+              <thead>
+                <tr>
+                  <th></th>
+                  <th style={thStyle}>Human</th>
+                  <th style={thStyle}>Robot</th>
+                  <th style={thStyle}>What is communicated by the robot</th>
+                  <th style={thStyle}>Modalities</th>
+                  <th style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => (
+                  <Draggable key={idx} draggableId={`row-${idx}`} index={idx}>
+                    {(provided) => (
+                      <tr
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        style={{
+                          ...provided.draggableProps.style,
+                          border: "1px solid #ccc",
+                        }}
+                      >
+                        <td {...provided.dragHandleProps} style={{ cursor: "grab", width: "30px" }}>
+                          ☰
+                        </td>
+                        <td style={tdStyle}>
+                          <input
+                            type="text"
+                            value={row.human}
+                            onChange={(e) => handleChange(idx, "human", e.target.value)}
+                            style={inputStyle}
+                          />
+                        </td>
+                        <td style={tdStyle}>
+                          <input
+                            type="text"
+                            value={row.robot}
+                            onChange={(e) => handleChange(idx, "robot", e.target.value)}
+                            style={inputStyle}
+                          />
+                        </td>
+                        <td style={tdStyle}>
+                          <select
+                            value={row.communicated}
+                            onChange={(e) => handleChange(idx, "communicated", e.target.value)}
+                            style={inputStyle}
+                          >
+                            <option value=""></option>
+                            {communicatedOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={tdStyle}>
+                          <button onClick={() => setEditingModalities(idx)}>
+                            {row.modality.length > 0 ? row.modality.join(", ") : "Edit Modalities"}
+                          </button>
+                        </td>
+                        <td style={tdStyle}>
+                          <button onClick={() => deleteRow(idx)}>✖</button>
+                        </td>
+                      </tr>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </tbody>
+            </table>
+          )}
+        </Droppable>
+      </DragDropContext>
+      <button onClick={addRow} style={{ marginTop: "10px" }}>
+        + Add Row
+      </button>
 
-      {/* Task description */}
-      <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", fontWeight: 600 }}>
-          Task description
-        </label>
-        <textarea
-          value={taskData.description}
-          onChange={(e) =>
-            setTaskData({ ...taskData, description: e.target.value })
-          }
-          placeholder="Describe the task the robot and human are engaged in..."
-          style={{
-            width: "100%",
-            height: "120px",
-            boxSizing: "border-box",
-            padding: "8px",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
+      {/* Modalities Editor */}
+      {editingModalities !== null && (
+        <ModalitiesEditor
+          initialSelection={rows[editingModalities].modality}
+          options={modalityOptions}
+          onSave={(selected) => {
+            const newRows = [...rows];
+            newRows[editingModalities].modality = selected;
+            updateRows(newRows);
+            setEditingModalities(null);
           }}
+          onCancel={() => setEditingModalities(null)}
         />
-      </div>
-
-      {/* Time critical */}
-      <div style={{ marginBottom: "16px" }}>
-        <label style={{ fontWeight: 600 }}>
-          <input
-            type="checkbox"
-            checked={taskData.timeCritical}
-            onChange={(e) =>
-              setTaskData({ ...taskData, timeCritical: e.target.checked })
-            }
-            style={{ marginRight: "8px" }}
-          />
-          Task is time-critical
-        </label>
-      </div>
-
-      {/* Actors */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-          Primary actor(s)
-        </div>
-
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={taskData.actorHuman}
-            onChange={(e) =>
-              setTaskData({ ...taskData, actorHuman: e.target.checked })
-            }
-            style={{ marginRight: "8px" }}
-          />
-          Human
-        </label>
-
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={taskData.actorRobot}
-            onChange={(e) =>
-              setTaskData({ ...taskData, actorRobot: e.target.checked })
-            }
-            style={{ marginRight: "8px" }}
-          />
-          Robot
-        </label>
-      </div>
-
-      {/* Failure severity */}
-      <div style={{ marginBottom: "16px" }}>
-        <label style={{ display: "block", fontWeight: 600 }}>
-          Consequences of task failure
-        </label>
-        <select
-          value={taskData.failureSeverity}
-          onChange={(e) =>
-            setTaskData({ ...taskData, failureSeverity: e.target.value })
-          }
-          style={{ marginTop: "4px", padding: "6px", width: "200px" }}
-        >
-          <option value="low">Low (minor inconvenience)</option>
-          <option value="medium">Medium (task disruption)</option>
-          <option value="high">High (safety or major cost)</option>
-        </select>
-      </div>
+      )}
     </div>
   );
 }
+
+const thStyle = {
+  border: "1px solid #ccc",
+  padding: "8px",
+  textAlign: "left",
+  backgroundColor: "#f0f0f0",
+};
+
+const tdStyle = {
+  border: "1px solid #ccc",
+  padding: "4px",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "4px",
+  boxSizing: "border-box",
+};
