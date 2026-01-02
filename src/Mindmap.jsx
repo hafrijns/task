@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -9,60 +9,159 @@ import ReactFlow, {
   Background,
 } from "react-flow-renderer";
 
-export default function Mindmap({ data, onSelectNode }) {
-  // Simple static nodes based on data keys
+const BASE_NODES = [
+  { id: "Task", type: "input", label: "Task", defaultPosition: { x: 300, y: 40 } },
+  { id: "Robot", label: "Robot", defaultPosition: { x: 50, y: 350 } },
+  { id: "Context", label: "Context", defaultPosition: { x: 50, y: 250 } },
+  { id: "Evaluation", label: "Evaluation", defaultPosition: { x: 300, y: 450 } },
+];
 
-  /*
-  const initialNodes = Object.keys(data).map((key, index) => ({
-    id: key,
-    type: "default",
-    data: { label: key },
-    position: { x: 200 + index * 200, y: 100 },
-  }));
+export default function Mindmap({ taskData, setTaskData, onSelectNode }) {
+  // ---------- derive nodes ----------
+  const derivedNodes = useMemo(() => {
+    const baseNodes = BASE_NODES.map((n) => ({
+      id: n.id,
+      type: n.type || "default",
+      data: { label: n.label },
+      position: taskData.nodes?.[n.id]?.position || n.defaultPosition,
+      draggable: true,
+    }));
 
-  const initialEdges = [
-    { id: "e1", source: "Task", target: "Robot", animated: true },
-  ].filter((e) => data[e.source] && data[e.target]);
-  */
-  const initialNodes = [
-    { id: "Task", type: "input", data: { label: "Task" }, position: { x: 100, y: 50 }, className: "pinkbox" },
-    { id: "Robot", type: "default", data: { label: "Robot" }, position: { x: 300, y: 150 } },
-    { id: "Intent", type: "default", data: { label: "Intent" }, position: { x: 100, y: 250 } },
-    { id: "Evaluation", type: "default", data: { label: "Evaluation" }, position: { x: 300, y: 350 } },
-  ];
+    const taskNodes = taskData.tasks?.map((task, i) => ({
+      id: task.id,
+      data: { label: task.goal ? `${task.id}\n${task.goal}` : task.id },
+      position: task.position || { x: 300, y: 120 + i * 80 },
+      draggable: true,
+    })) || [];
 
-  const initialEdges = [
-    { id: "e1", source: "Task", target: "Robot", animated: true },
-    { id: "e2", source: "Task", target: "Intent", animated: true },
-    { id: "e3", source: "Robot", target: "Evaluation", animated: true },
-    { id: "e4", source: "Intent", target: "Evaluation", animated: true },
-  ];
-  const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges);
+    return [...baseNodes, ...taskNodes];
+  }, [taskData]);
 
+  // ---------- derive edges ----------
+  const derivedEdges = useMemo(() => {
+    const baseEdges = [
+      { id: "e-task-eval", source: "Task", target: "Evaluation", animated: true, selectable: true },
+      { id: "e-context-robot", source: "Context", target: "Robot", animated: false, selectable: true },
+    ];
+
+    const taskEdges = taskData.tasks?.flatMap((task) => [
+      { id: `e-task-${task.id}`, source: "Task", target: task.id, animated: true, selectable: true },
+      { id: `e-${task.id}-eval`, source: task.id, target: "Evaluation", animated: true, selectable: true },
+    ]) || [];
+
+    const userEdges = (taskData.edges || []).map((e) => ({ ...e, selectable: true }));
+
+    return [...baseEdges, ...taskEdges, ...userEdges];
+  }, [taskData]);
+
+  // ---------- state ----------
+  const [nodes, setNodes] = useState(derivedNodes);
+  const [edges, setEdges] = useState(derivedEdges);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState([]);
+
+  // ---------- sync with taskData ----------
+  useEffect(() => {
+    setNodes(derivedNodes);
+    setEdges(derivedEdges);
+  }, [derivedNodes, derivedEdges]);
+
+  // ---------- handlers ----------
   const onNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
+    (changes) => {
+      setNodes((nds) => {
+        const updated = applyNodeChanges(changes, nds);
+
+        // Schedule taskData update after render
+        setTimeout(() => {
+          setTaskData((prev) => {
+            const newTasks = prev.tasks.map((t) => {
+              const node = updated.find((n) => n.id === t.id);
+              if (node) return { ...t, position: node.position };
+              return t;
+            });
+            const nodePositions = {};
+            updated.forEach((n) => { nodePositions[n.id] = { position: n.position }; });
+            const updatedData = { ...prev, tasks: newTasks, nodes: nodePositions };
+            localStorage.setItem("taskData", JSON.stringify(updatedData));
+            return updatedData;
+          });
+        }, 0);
+
+        return updated;
+      });
+    },
+    [setTaskData]
   );
+
   const onEdgesChange = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
     []
   );
+
   const onConnect = useCallback(
-    (connection) => setEdges((eds) => addEdge({ ...connection, animated: true }, eds)),
-    []
-  );
+    (connection) => {
+      setEdges((eds) => {
+        const newEdge = { ...connection, animated: true, selectable: true };
+        const newEdges = addEdge(newEdge, eds);
 
-  const handleNodeClick = useCallback(
-    (event, node) => {
-      onSelectNode(node.id);
+        setTimeout(() => {
+          setTaskData((prev) => {
+            const userEdges = newEdges.filter(
+              (e) =>
+                !e.id.startsWith("e-task") &&
+                !e.id.startsWith("e-") &&
+                !["e-task-eval", "e-context-robot"].includes(e.id)
+            );
+            const updatedData = { ...prev, edges: userEdges };
+            localStorage.setItem("taskData", JSON.stringify(updatedData));
+            return updatedData;
+          });
+        }, 0);
+
+        return newEdges;
+      });
     },
-    [onSelectNode]
+    [setTaskData]
   );
 
+  const handleNodeClick = useCallback((_, node) => onSelectNode(node.id), [onSelectNode]);
+
+  const onSelectionChange = useCallback(({ edges: selected }) => {
+    setSelectedEdgeIds(selected.map((e) => e.id));
+  }, []);
+
+  // Delete selected edges with Delete key
+  const onKeyDown = useCallback(() => {
+    if (selectedEdgeIds.length === 0) return;
+
+    setEdges((eds) => {
+      const remaining = eds.filter((e) => !selectedEdgeIds.includes(e.id));
+      setTaskData((prev) => {
+        const userEdges = remaining.filter(
+          (e) =>
+            !e.id.startsWith("e-task") &&
+            !e.id.startsWith("e-") &&
+            !["e-task-eval", "e-context-robot"].includes(e.id)
+        );
+        const updatedData = { ...prev, edges: userEdges };
+        localStorage.setItem("taskData", JSON.stringify(updatedData));
+        return updatedData;
+      });
+      return remaining;
+    });
+
+    setSelectedEdgeIds([]);
+  }, [selectedEdgeIds, setTaskData]);
+
+  useEffect(() => {
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onKeyDown]);
+
+  // ---------- render ----------
   return (
     <ReactFlowProvider>
-      <div style={{ height: 800, width: 800 }}>
+      <div style={{ width: "800px", height: "800px" }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -70,6 +169,7 @@ export default function Mindmap({ data, onSelectNode }) {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={handleNodeClick}
+          onSelectionChange={onSelectionChange}
           fitView
         >
           <MiniMap />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Mindmap from "./Mindmap";
 import TaskForm from "./TaskForm";
+import EvaluationForm from "./EvaluationForm";
 
 export default function App() {
   const topics = ["Task", "Robot", "Intent", "Evaluation"];
@@ -14,14 +15,23 @@ export default function App() {
 
 // Structured Task worksheet
   const [taskData, setTaskData] = useState(() => {
-    return JSON.parse(localStorage.getItem("taskData")) || {
-      description: "",
-      timeCritical: false,
-      actorHuman: false,
-      actorRobot: false,
-      failureSeverity: "low",
-    };
-  });
+  return (
+    JSON.parse(localStorage.getItem("taskData")) || {
+      meta: {
+        description: "",
+         human: "",
+          robot: "",
+          communicated: "",
+          modality: [],
+      },
+      tasks: [{ id: "task-1", goal: "", rows: [] }],
+      taskCounter: 1,
+    }
+  );
+});
+
+const [selectedTaskId, setSelectedTaskId] = useState(null);
+
 
 useEffect(() => {
   localStorage.setItem("taskData", JSON.stringify(taskData));
@@ -139,8 +149,10 @@ useEffect(() => {
             
             <div style={{ overflow: "auto" }}>
               {currentTab === "Task" ? (
-              <TaskForm taskData={taskData}setTaskData={setTaskData} /> 
-            ) : (
+              <TaskForm taskData={taskData} setTaskData={setTaskData} selectedTaskId={selectedTaskId}/> 
+              ) : currentTab === "Evaluation" ? (
+              <EvaluationForm taskData={taskData} />
+              ) : (
             <textarea
               style={{
                 width: "500px",
@@ -160,10 +172,23 @@ useEffect(() => {
           </div>
         ) : (
           <div style={{ flex: 1, minHeight: 0 }}>
-            <Mindmap data={data} onSelectNode={  (topic) => {
-              setCurrentTab(topic);
-               setView("tabs");
-               }} />
+            <Mindmap
+  data={data} setTaskData={setTaskData} taskData={taskData}
+  onSelectNode={(nodeId) => {
+    // Case 1: main tabs
+    if (["Task", "Robot", "Intent", "Evaluation"].includes(nodeId)) {
+      setCurrentTab(nodeId);
+      setSelectedTaskId(null);
+      setView("tabs");
+      }
+
+    if (nodeId.startsWith("task-")) {
+      setCurrentTab("Task");
+      setSelectedTaskId(nodeId);
+      setView("tabs");
+    }
+  }}
+/>
           </div>
         )}
       </div>
