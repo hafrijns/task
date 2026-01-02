@@ -32,7 +32,7 @@ useEffect(() => {
   }
 }, [taskData, setTaskData]);
 
-  const tasks = taskData.tasks;
+  const tasks = taskData.tasks || [];
 
   const communicatedOptions = [
     "Motion intent",

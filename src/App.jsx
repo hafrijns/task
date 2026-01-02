@@ -151,7 +151,7 @@ useEffect(() => {
               {currentTab === "Task" ? (
               <TaskForm taskData={taskData} setTaskData={setTaskData} selectedTaskId={selectedTaskId}/> 
               ) : currentTab === "Evaluation" ? (
-              <EvaluationForm taskData={taskData} />
+              <EvaluationForm taskData={taskData} setTaskData={setTaskData} />
               ) : (
             <textarea
               style={{

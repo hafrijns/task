@@ -67,31 +67,37 @@ export default function Mindmap({ taskData, setTaskData, onSelectNode }) {
 
   // ---------- handlers ----------
   const onNodesChange = useCallback(
-    (changes) => {
-      setNodes((nds) => {
-        const updated = applyNodeChanges(changes, nds);
+  (changes) => {
+    setNodes((nds) => {
+      const updated = applyNodeChanges(changes, nds);
 
-        // Schedule taskData update after render
-        setTimeout(() => {
-          setTaskData((prev) => {
-            const newTasks = prev.tasks.map((t) => {
-              const node = updated.find((n) => n.id === t.id);
-              if (node) return { ...t, position: node.position };
-              return t;
-            });
-            const nodePositions = {};
-            updated.forEach((n) => { nodePositions[n.id] = { position: n.position }; });
-            const updatedData = { ...prev, tasks: newTasks, nodes: nodePositions };
-            localStorage.setItem("taskData", JSON.stringify(updatedData));
-            return updatedData;
+      // Schedule taskData update after render
+      setTimeout(() => {
+        setTaskData((prev) => {
+          const tasks = prev.tasks || []; // safe fallback
+          const newTasks = tasks.map((t) => {
+            const node = updated.find((n) => n.id === t.id);
+            if (node) return { ...t, position: node.position };
+            return t;
           });
-        }, 0);
 
-        return updated;
-      });
-    },
-    [setTaskData]
-  );
+          // Store positions of all nodes
+          const nodePositions = {};
+          updated.forEach((n) => {
+            nodePositions[n.id] = { position: n.position };
+          });
+
+          const updatedData = { ...prev, tasks: newTasks, nodes: nodePositions };
+          localStorage.setItem("taskData", JSON.stringify(updatedData));
+          return updatedData;
+        });
+      }, 0);
+
+      return updated;
+    });
+  },
+  [setTaskData]
+);
 
   const onEdgesChange = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
